@@ -5,6 +5,8 @@
 (struct pnt (x y)
         #:transparent)
 
+;;; Parses coordinates string into pnt struct. Raises an error if parsing fails.
+;;; Example: (parse-coords "8, 3") => (pnt 8 3)
 (define (parse-coords line)
   (match (string-split line ", ")
     [(list x-str y-str) (pnt (string->number x-str) (string->number y-str))]
@@ -13,6 +15,9 @@
 (module+ test
   (check-equal? (parse-coords "8, 3") (pnt 8 3)))
 
+;;; Finds the "best" element in the list using the better-than? function.
+;;; better-than? accept two elements of the list and should return #t
+;;; if the first element is "better" than the second, or #f otherwise.
 (define (find-best lst better-than?)
   (for/fold
       ([best-elem #f])
@@ -25,6 +30,8 @@
 (struct borders (left top right bottom)
         #:transparent)
 
+;;; Finds the leftmost and rightmost X coordinates and topmost and bottommost
+;;; Y coordinates of the points in the list and returns them as a borders struct.
 (define (field-borders pnts)
   (borders
     (pnt-x (find-best pnts (lambda (p1 p2) (< (pnt-x p1) (pnt-x p2)))))
@@ -37,6 +44,7 @@
                                      (pnt 3 4) (pnt 5 5) (pnt 8 9)))
                 (borders 1 1 8 9)))
 
+;;; Returns Manhattan distance between two points.
 (define (dist p1 p2)
   (+ (abs (- (pnt-x p1) (pnt-x p2)))
      (abs (- (pnt-y p1) (pnt-y p2)))))
@@ -44,6 +52,8 @@
 (module+ test
   (check-equal? (dist (pnt 1 2) (pnt 3 0)) 4))
 
+;;; Returns a hash which maps a distance value to the set a points from `pnts`
+;;; which are located in the said distance from the point `pnt`.
 (define (distances pnt pnts)
   (for/fold
       ([dists (hash)])
@@ -53,6 +63,9 @@
         [same-dist-set (hash-ref dists d (set))])
       (hash-set dists d (set-add same-dist-set p)))))
 
+;;; Returns the closest point to the `pnt` in the `pnts` list.
+;;; If there multiple candidates for the closest point (having the same distance
+;;; to the `pnt`), `closest` returns #f.
 (define (closest pnt pnts)
   (let*
       ([dist-hash (distances pnt pnts)]
@@ -63,15 +76,17 @@
 
 (module+ test
   (check-equal? (closest (pnt 2 1) (list (pnt 1 1) (pnt 1 6) (pnt 8 3)
-                                           (pnt 3 4) (pnt 5 5) (pnt 8 9)))
+                                         (pnt 3 4) (pnt 5 5) (pnt 8 9)))
                 (pnt 1 1))
   (check-equal? (closest (pnt 5 2) (list (pnt 1 1) (pnt 1 6) (pnt 8 3)
-                                           (pnt 3 4) (pnt 5 5) (pnt 8 9)))
+                                         (pnt 3 4) (pnt 5 5) (pnt 8 9)))
                 (pnt 5 5))
   (check-equal? (closest (pnt 0 4) (list (pnt 1 1) (pnt 1 6) (pnt 8 3)
-                                           (pnt 3 4) (pnt 5 5) (pnt 8 9)))
+                                         (pnt 3 4) (pnt 5 5) (pnt 8 9)))
                 #f))
 
+;;; Returns a set of points located on the edges of provided borders
+;;; (`borders` struct).
 (define (border-edges brd)
   (set-union
     (for/set
@@ -94,6 +109,11 @@
                      (pnt 3 4) (pnt 2 4)
                      (pnt 1 4) (pnt 1 3) (pnt 1 2))))
 
+;;; Returns a set of points, which are located on the edge of the field of
+;;; points `pnts`. Edge point is the point, whose surrounding area would be
+;;; inifinitely large.
+;;; This function recognises and point as an edge point, if it's the closest
+;;; to one of the locations on the edges of the field (found by `border-edges`).
 (define (edge-pnts pnts)
   (for/set
       ([b-edge (border-edges (field-borders pnts))]
@@ -105,6 +125,7 @@
                                  (pnt 3 4) (pnt 5 5) (pnt 8 9)))
                 (set (pnt 1 1) (pnt 1 6) (pnt 8 3) (pnt 8 9))))
 
+;;; Returns a set of all the locations in the field inside the given borders.
 (define (field-pnts brd)
   (for*/set
       ([x (in-range (borders-left brd) (+ 1 (borders-right brd)))]
@@ -117,6 +138,7 @@
                      (pnt 2 1) (pnt 2 2) (pnt 2 3) (pnt 2 4)
                      (pnt 3 1) (pnt 3 2) (pnt 3 3) (pnt 3 4))))
 
+;;; Returns a hash which map each non-edge point to its surrounding area.
 (define (calc-areas-around pnts)
   (define edges (edge-pnts pnts))
   (for/fold
@@ -133,11 +155,14 @@
                 (hash (pnt 3 4) 9
                       (pnt 5 5) 17)))
 
+;;; Returns the sum of distances from `pnt` to every point in `pnts`.
 (define (sum-dists pnt pnts)
   (for/sum
       ([p pnts])
     (dist pnt p)))
 
+;;; Counts locations inside the field of `pnts`, whose `sum-dists` is
+;;; less than `max-dist`.
 (define (count-points-within-reach pnts max-dist)
   (for/sum
       ([p (field-pnts (field-borders pnts))])
