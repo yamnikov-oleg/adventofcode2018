@@ -133,19 +133,34 @@
                 (hash (pnt 3 4) 9
                       (pnt 5 5) 17)))
 
-(define (main in)
+(define (sum-dists pnt pnts)
+  (for/sum
+      ([p pnts])
+    (dist pnt p)))
+
+(define (count-points-within-reach pnts max-dist)
+  (for/sum
+      ([p (field-pnts (field-borders pnts))])
+    (if (< (sum-dists p pnts) max-dist)
+        1
+        0)))
+
+(define (main in max-dist)
   (let*
       ([pnts (map parse-coords (port->lines in))]
-      [areas (calc-areas-around pnts)]
-      [biggest-area-pnt (find-best (hash-keys areas)
-                                  (lambda (p1 p2) (> (hash-ref areas p1)
-                                                      (hash-ref areas p2))))])
+       [areas (calc-areas-around pnts)]
+       [biggest-area-pnt (find-best (hash-keys areas)
+                                    (lambda (p1 p2) (> (hash-ref areas p1)
+                                                       (hash-ref areas p2))))]
+       [center-pnts-cnt (count-points-within-reach pnts max-dist)])
     (printf "Biggest area: ~a\n" (hash-ref areas biggest-area-pnt))
-    (printf "Around point: ~a\n" biggest-area-pnt)))
+    (printf "Around point: ~a\n" biggest-area-pnt)
+    (printf "Locations within ~a distance of all other points: ~a\n" max-dist center-pnts-cnt)))
 
 (module+ main
-  (define input-file-path
+  (define args
     (command-line
-      #:args (path)
-      path))
-  (call-with-input-file input-file-path main))
+      #:args (path max-dist)
+      (cons path (or (string->number max-dist)
+                     (error "Invalid number:" max-dist)))))
+  (call-with-input-file (car args) (lambda (in) (main in (cdr args)))))
