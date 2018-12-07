@@ -2,6 +2,7 @@
 (module+ test
   (require rackunit))
 
+;;; `on` must be finished before `of` can begin.
 (struct dependency (of on) #:transparent)
 
 (define (parse-dep-line line)
@@ -13,6 +14,8 @@
   (check-equal? (parse-dep-line "Step C must be finished before step A can begin.")
                 (dependency #\A #\C)))
 
+;;; Takes a list of `depedency` structs and returns dependency map:
+;;; a hash which maps every step to a set of other steps it depends on.
 (define (make-dep-map deps)
   (for/fold
       ([dep-map (hash)])
@@ -43,6 +46,8 @@
                       #\E (set #\B #\D #\F)
                       #\F (set #\C))))
 
+;;; Returns a list of steps which can be currently run according
+;;; to the depedency map and a set of finished steps.
 (define (steps-to-run deps-map done-set)
   (define (runnable-steps deps-map done-steps)
     (for/set
@@ -70,6 +75,9 @@
   (check-equal? (steps-to-run test-dep-map (set #\C #\A #\B #\D #\F #\E))
                 (list)))
 
+;;; Runs the next available step and returns the new list of finished steps
+;;; (done-list with the last step appended to it).
+;;; If no step can be run, returns #f.
 (define (run-step deps-map done-list)
   (match (steps-to-run deps-map (list->set done-list))
     [(list) #f]
@@ -91,6 +99,8 @@
   (check-equal? (run-step test-dep-map (list #\C #\A #\B #\D #\F #\E))
                 #f))
 
+;;; Completes all the steps and returns the list of these steps in the order
+;;; of running.
 (define (run-seq deps-map)
   (define (run-seq-rec deps-map done-list)
     (match (run-step deps-map done-list)
@@ -101,6 +111,8 @@
 (module+ test
   (check-equal? (run-seq test-dep-map) (list #\C #\A #\B #\D #\F #\E)))
 
+;;; Returns time required to finish the step which equals to its number
+;;; in the English alphabet (1..26) + `base`.
 (define (step-time step [base 60])
   (+ (char->integer step)
      (* -1 (char->integer #\A))
@@ -114,9 +126,12 @@
 
 (struct task (step finish-time) #:transparent)
 
+;;; Make a new vector of worker queues. Each queue is a list of `task`
+;;; in the order from last to the first.
 (define (empty-worker-queues worker-cnt)
   (make-vector worker-cnt (list)))
 
+;;; Returns a set of steps completed by workers at the given time.
 (define (done-steps queues cur-time)
   (for/fold
       ([steps (set)])
@@ -139,6 +154,7 @@
   (check-equal? (done-steps test-queues 9) (set #\A #\C))
   (check-equal? (done-steps test-queues 12) (set #\A #\B #\C)))
 
+;;; Returns a set of steps ever assigned to the workers with the given queues.
 (define (assigned-steps queues)
   (for/fold
       ([steps (set)])
@@ -151,6 +167,7 @@
 (module+ test
   (check-equal? (assigned-steps test-queues) (set #\A #\B #\C)))
 
+;;; Returns #t if a worker with given queue can be assigned new task at the time.
 (define (worker-available? queue cur-time)
   (for/and
     ([t queue])
@@ -168,6 +185,8 @@
   (check-equal? (worker-available? (vector-ref test-queues 1) 12)
                 #t))
 
+;;; Returns the first available worker's index in the given time or #f
+;;; if not workers are available.
 (define (available-worker queues cur-time)
   (for/first
       ([queue queues]
@@ -175,6 +194,7 @@
       #:when (worker-available? queue cur-time))
     ix))
 
+;;; I couldn't find immutable version of `vector-set!` function.
 (define (vector-set vec ix val)
   (for/vector
       ([cur-val vec]
@@ -183,6 +203,10 @@
         val
         cur-val)))
 
+;;; Assigns the task of completing the given step starting at `cur-time`
+;;; to the first available worker in the given worker queues.
+;;; If not worker is available returns worker queues unchanged.
+;;; Optional arg step-time-base is used to passed to `step-time`.
 (define (maybe-assign-work queues step cur-time [step-time-base 60])
   (match (available-worker queues cur-time)
     [#f queues]
@@ -209,6 +233,9 @@
                 (vector (list (task #\D 16) (task #\B 12) (task #\A 6))
                         (list (task #\C 9)))))
 
+;;; Runs all the tasks in the `deps-map` with the given number of workers
+;;; and returns their queues after all the steps have been completed.
+;;; Optional step-time-base is passed to `maybe-assign-work`.
 (define (run-par deps-map worker-cnt [step-time-base 60])
   (for*/fold
       ([queues (empty-worker-queues worker-cnt)])
@@ -224,6 +251,7 @@
                 (vector (list (task #\E 15) (task #\D 10) (task #\B 6) (task #\A 4) (task #\C 3))
                         (list (task #\F 9)))))
 
+;;; Maps every worker queue to the time when last task in the queue is completed.
 (define (finish-times queues)
   (for/vector
       ([queue queues])
@@ -231,6 +259,7 @@
       [(list) 0]
       [(cons t _) (task-finish-time t)])))
 
+;;; Gets the time at which all the tasks in worker queues are finished.
 (define (work-finished-at queues)
   (for/fold
       ([fin-time #f])
